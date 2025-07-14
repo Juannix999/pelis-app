@@ -1,93 +1,207 @@
 <template>
-  <main>
-    <h1>🎬 Películas populares</h1>
+  <div class="app">
+    <h1>🎬 Pelis App – Recomendaciones de Cine</h1>
 
-    <section v-if="movies.length">
-      <div v-for="movie in movies" :key="movie.id" class="movie-card">
-        <h2>{{ movie.title }}</h2>
-        <p>📅 Fecha de estreno: {{ movie.release_date }}</p>
-        <button @click="addToFavorites(movie)">⭐ Agregar a favoritos</button>
+    <section class="peliculas-populares">
+      <h2>Películas Populares</h2>
+      <div v-if="peliculas.length === 0">Cargando películas...</div>
+      <div class="grid">
+        <div v-for="peli in peliculas" :key="peli.id" class="peli-card">
+          <img :src="getImageUrl(peli.poster_path)" :alt="peli.title" />
+          <h3>{{ peli.title }}</h3>
+          <button @click="agregarAFavoritos(peli)" :disabled="isEnFavoritos(peli.id)">Agregar a Favoritos</button>
+          <button @click="agregarAWatchlist(peli)" :disabled="isEnWatchlist(peli.id)">Agregar a Quiero Ver</button>
+        </div>
       </div>
     </section>
 
-    <section v-else>
-      <p>Cargando películas...</p>
-    </section>
-
-    <hr />
-
-    <section v-if="favorites.length">
-      <h2>🎉 Favoritas</h2>
-      <div v-for="fav in favorites" :key="fav.id" class="favorite-card">
-        <h3>{{ fav.title }}</h3>
-        <textarea v-model="fav.note" placeholder="Agrega una nota"></textarea>
-        <button @click="removeFromFavorites(fav.id)">❌ Quitar</button>
+    <section class="lista-favoritos">
+      <h2>Favoritos</h2>
+      <div v-if="favoritos.length === 0">No tienes películas favoritas aún.</div>
+      <div class="grid">
+        <div v-for="peli in favoritos" :key="peli.id" class="peli-card">
+          <img :src="getImageUrl(peli.poster_path)" :alt="peli.title" />
+          <h3>{{ peli.title }}</h3>
+          <textarea
+            v-model="peli.nota"
+            placeholder="Agregar/editar nota personal"
+            @input="editarNotaFavorito(peli.id, peli.nota)"
+          ></textarea>
+          <button @click="eliminarDeFavoritos(peli.id)">Eliminar</button>
+        </div>
       </div>
     </section>
-  </main>
+
+    <section class="lista-watchlist">
+      <h2>Películas que Quiero Ver</h2>
+      <div v-if="watchlist.length === 0">No tienes películas en tu lista de 'Quiero Ver'.</div>
+      <div class="grid">
+        <div v-for="peli in watchlist" :key="peli.id" class="peli-card">
+          <img :src="getImageUrl(peli.poster_path)" :alt="peli.title" />
+          <h3>{{ peli.title }}</h3>
+          <textarea
+            v-model="peli.nota"
+            placeholder="Agregar/editar nota personal"
+            @input="editarNotaWatchlist(peli.id, peli.nota)"
+          ></textarea>
+          <button @click="eliminarDeWatchlist(peli.id)">Eliminar</button>
+          <button @click="moverWatchlistAFavoritos(peli.id)">Marcar como visto</button>
+        </div>
+      </div>
+    </section>
+  </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
 
+// Estados reactivos
+const peliculas = ref([])
+const favoritos = ref(JSON.parse(localStorage.getItem('favoritos')) || [])
+const watchlist = ref(JSON.parse(localStorage.getItem('watchlist')) || [])
+
+// API TMDb
 const API_KEY = import.meta.env.VITE_TMDB_KEY
 const URL_POPULAR = `https://api.themoviedb.org/3/movie/popular?api_key=${API_KEY}&language=es-ES&page=1`
 
-const movies = ref([])
-const favorites = ref([])
-
-// Cargar películas desde la API
-onMounted(async () => {
+async function cargarPeliculas() {
   try {
     const res = await fetch(URL_POPULAR)
     const data = await res.json()
-    movies.value = data.results
+    peliculas.value = data.results
   } catch (error) {
-    console.error('Error al cargar películas:', error)
+    console.error('Error cargando películas:', error)
   }
+}
 
-  // Cargar favoritos desde localStorage
-  const stored = localStorage.getItem('favoritos')
-  if (stored) {
-    favorites.value = JSON.parse(stored)
+// Función para obtener URL completa del poster
+function getImageUrl(path) {
+  return path ? `https://image.tmdb.org/t/p/w300${path}` : 'https://via.placeholder.com/300x450?text=No+Image'
+}
+
+// Funciones Favoritos
+function agregarAFavoritos(peli) {
+  if (!favoritos.value.find(f => f.id === peli.id)) {
+    favoritos.value.push({...peli, nota: ''})
+    actualizarStorage('favoritos', favoritos.value)
+    eliminarDeWatchlist(peli.id)
   }
+}
+
+function eliminarDeFavoritos(id) {
+  favoritos.value = favoritos.value.filter(f => f.id !== id)
+  actualizarStorage('favoritos', favoritos.value)
+}
+
+function editarNotaFavorito(id, nuevaNota) {
+  const peli = favoritos.value.find(f => f.id === id)
+  if (peli) {
+    peli.nota = nuevaNota
+    actualizarStorage('favoritos', favoritos.value)
+  }
+}
+
+function isEnFavoritos(id) {
+  return favoritos.value.some(f => f.id === id)
+}
+
+// Funciones Watchlist
+function agregarAWatchlist(peli) {
+  if (!watchlist.value.find(w => w.id === peli.id)) {
+    watchlist.value.push({...peli, nota: ''})
+    actualizarStorage('watchlist', watchlist.value)
+  }
+}
+
+function eliminarDeWatchlist(id) {
+  watchlist.value = watchlist.value.filter(w => w.id !== id)
+  actualizarStorage('watchlist', watchlist.value)
+}
+
+function editarNotaWatchlist(id, nuevaNota) {
+  const peli = watchlist.value.find(w => w.id === id)
+  if (peli) {
+    peli.nota = nuevaNota
+    actualizarStorage('watchlist', watchlist.value)
+  }
+}
+
+function isEnWatchlist(id) {
+  return watchlist.value.some(w => w.id === id)
+}
+
+// Mover película de watchlist a favoritos
+function moverWatchlistAFavoritos(id) {
+  const peli = watchlist.value.find(w => w.id === id)
+  if (peli) {
+    agregarAFavoritos(peli)
+    eliminarDeWatchlist(id)
+  }
+}
+
+// Guardar en localStorage
+function actualizarStorage(clave, valor) {
+  localStorage.setItem(clave, JSON.stringify(valor))
+}
+
+onMounted(() => {
+  cargarPeliculas()
 })
-
-// Agregar a favoritos
-function addToFavorites(movie) {
-  if (!favorites.value.find(m => m.id === movie.id)) {
-    favorites.value.push({ ...movie, note: '' })
-    localStorage.setItem('favoritos', JSON.stringify(favorites.value))
-  }
-}
-
-// Quitar de favoritos
-function removeFromFavorites(id) {
-  favorites.value = favorites.value.filter(m => m.id !== id)
-  localStorage.setItem('favoritos', JSON.stringify(favorites.value))
-}
 </script>
 
 <style scoped>
-main {
-  padding: 2rem;
+.app {
+  max-width: 1000px;
+  margin: auto;
+  padding: 1rem;
   font-family: Arial, sans-serif;
 }
-.movie-card, .favorite-card {
+
+h1, h2 {
+  text-align: center;
+}
+
+.grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  justify-content: center;
+}
+
+.peli-card {
   border: 1px solid #ccc;
-  padding: 1rem;
-  margin-bottom: 1rem;
-  border-radius: 8px;
-  background-color: #f9f9f9;
+  border-radius: 6px;
+  padding: 0.5rem;
+  width: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
-textarea {
+
+.peli-card img {
   width: 100%;
-  min-height: 60px;
-  margin-top: 0.5rem;
+  border-radius: 4px;
 }
-button {
-  margin-top: 0.5rem;
-  padding: 0.3rem 0.7rem;
+
+.peli-card h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+  text-align: center;
+}
+
+.peli-card button {
+  margin: 0.25rem 0;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.9rem;
   cursor: pointer;
+}
+
+.peli-card textarea {
+  width: 100%;
+  height: 60px;
+  margin-bottom: 0.5rem;
+  resize: none;
+  font-size: 0.9rem;
+  padding: 0.25rem;
 }
 </style>
